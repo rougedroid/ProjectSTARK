@@ -1,0 +1,2 @@
+# ProjectSTARK
+Symbolic Artificial Intelligence
