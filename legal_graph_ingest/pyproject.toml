@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "legal-graph-ingest"
+version = "0.1.0"
+description = "Contract PDF -> source-grounded proposition graph in Neo4j (extraction only, no legal reasoning)."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "pymupdf>=1.24",
+    "ollama>=0.3",
+    "pydantic>=2.5",
+    "neo4j>=5.14",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[project.scripts]
+legal-graph-ingest = "legal_graph_ingest.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.setuptools.package-data]
+legal_graph_ingest = ["py.typed"]
