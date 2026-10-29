@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+[project]
+name = "neo-reasoning"
+version = "0.1.0"
+description = "Neo4j-backed symbolic reasoning operator framework"
+requires-python = ">=3.10"
+dependencies = ["neo4j>=5.15,<7"]
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+[tool.setuptools.packages.find]
+where = ["src"]
