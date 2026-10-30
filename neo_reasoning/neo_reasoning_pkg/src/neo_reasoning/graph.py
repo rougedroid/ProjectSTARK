@@ -1,7 +1,6 @@
 """Read-only Neo4j graph facade for reasoning operators."""
 from __future__ import annotations
 from collections.abc import Iterator
-from neo4j import GraphDatabase
 from .models import Document, Entity, Mention, Pattern, Proposition, SemanticEdge, Evidence
 
 RELATIONS = frozenset({"REFERS_TO", "QUALIFIES", "EXCEPTS_FROM", "SUPPORTS", "CONTRADICTS", "DUPLICATE_OF"})
@@ -17,6 +16,7 @@ def _mention(d):
 
 class KnowledgeGraph:
     def __init__(self, uri: str, username: str, password: str, database: str = "neo4j", document_ids: list[str] | None = None):
+        from neo4j import GraphDatabase
         self.driver = GraphDatabase.driver(uri, auth=(username, password))
         self.database = database
         self.document_ids = list(document_ids or [])
@@ -38,7 +38,7 @@ class KnowledgeGraph:
         docs = self.document_ids if document_ids is None else document_ids
         return self._read("MATCH (p:Proposition) WHERE size($docs)=0 OR p.document_id IN $docs RETURN count(p) AS n", docs=docs)[0]["n"]
     def get_fact(self, proposition_id: str) -> Proposition | None:
-        rows = self._read("MATCH (p:Proposition {proposition_id:$id}) RETURN properties(p) AS p", id=proposition_id)
+        rows = self._read("MATCH (p:Proposition {proposition_id:$id}) WHERE size($docs)=0 OR p.document_id IN $docs RETURN properties(p) AS p", id=proposition_id, docs=self.document_ids)
         return Proposition.from_neo4j(rows[0]["p"]) if rows else None
     def match(self, pattern: Pattern, limit: int = 1000, document_ids: list[str] | None = None) -> list[tuple[Proposition, dict[str, str]]]:
         """?variables bind across subject/predicate/object; repeated variables must agree."""
@@ -60,7 +60,7 @@ class KnowledgeGraph:
         if relation is not None and relation not in RELATIONS: raise ValueError("Unsupported semantic relationship")
         if direction not in ("in", "out", "both"): raise ValueError("direction must be in/out/both")
         arrow = {"out": "(a)-[r]->(b)", "in": "(a)<-[r]-(b)", "both": "(a)-[r]-(b)"}[direction]
-        query = f"MATCH {arrow} WHERE a:Proposition AND b:Proposition AND ($id IS NULL OR a.proposition_id=$id) AND ($rel IS NULL OR type(r)=$rel) AND (size($docs)=0 OR (a.document_id IN $docs AND b.document_id IN $docs)) RETURN a.proposition_id AS source, b.proposition_id AS target, type(r) AS relation, properties(r) AS props LIMIT $limit"
+        query = f"MATCH {arrow} WHERE a:Proposition AND b:Proposition AND ($id IS NULL OR a.proposition_id=$id) AND ($rel IS NULL OR type(r)=$rel) AND (size($docs)=0 OR (a.document_id IN $docs AND b.document_id IN $docs)) RETURN startNode(r).proposition_id AS source, endNode(r).proposition_id AS target, type(r) AS relation, properties(r) AS props LIMIT $limit"
         rows = self._read(query, id=proposition_id, rel=relation, docs=self.document_ids, limit=limit)
         return [SemanticEdge(r["source"], r["target"], r["relation"], r["props"].get("method", ""), r["props"].get("confidence"), tuple(r["props"].get("evidence") or ()), r["props"].get("rationale", "")) for r in rows]
     def provenance(self, proposition_id: str) -> Evidence | None:
@@ -72,6 +72,7 @@ class KnowledgeGraph:
     def documents(self) -> list[Document]:
         rows = self._read("MATCH (d:Document) WHERE size($docs)=0 OR d.document_id IN $docs RETURN properties(d) AS d", docs=self.document_ids)
         return [Document(**{k:v for k,v in r["d"].items() if k in Document.__dataclass_fields__}) for r in rows]
-    def rules(self):
-        """No Rule node exists in the six-node schema. Implement a rule projection in your operator layer."""
-        return []
+    def rules(self, limit: int = 5000):
+        """Project only explicit structured rules; no free-text interpretation."""
+        from .reasoning import project_rules
+        return project_rules(self.facts(limit=limit))[0]
