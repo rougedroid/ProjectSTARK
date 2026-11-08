@@ -133,3 +133,40 @@ The PDF test builds a small contract with PyMuPDF.
 - Entity creation is deliberately conservative (capitalised/defined terms only); no cross-alias merging yet.
 - `Argument` nodes for multi-premise reasoning are intentionally left for the reasoning-engine stage.
 - Extraction quality depends on the Ollama model; `OLLAMA_MODEL` is configurable so models can be compared.
+
+## v0.2: structured logical extraction and manually authored rules
+
+The extractor now requests an optional `logic` object for each proposition, validated
+by `logic/schema.py` and persisted as `Proposition.logic_json`. Existing Neo4j
+labels/relationships and the original proposition fields are preserved. The logical
+IR supports `fact`, `norm`, `rule`, `definition`, `exception`, `unresolved`,
+recursive AND/OR/NOT expressions, atom modalities, and explicit exceptions.
+
+```python
+from legal_graph_ingest import GraphIngestor
+with GraphIngestor(ollama_model="your-installed-model", neo4j_password="...") as g:
+    report = g.ingest("contract.pdf")
+    added = g.add_rule("If the Client pays all fees, the Agreement terminates.",
+                       document_id=report.document_id)
+    print(added[0].logic)
+```
+
+`add_rule(text, document_id=None, resolve=False)` uses the same Ollama extraction,
+verbatim quote checks, Pydantic validation, batch persistence and checkpoints as
+PDF ingestion. When no document ID is given, it uses a dedicated user-authored
+Document. Existing documents are never silently created for an unknown ID.
+Manually added propositions use `attribution=user_input` and `section=user_input`.
+Their virtual page is 1 for compatibility with the existing Mention model; **it is
+not a real PDF page**. Repeated identical inputs are idempotent.
+
+The `logic` object defaults to `review_status=proposed`; `compile_logic` only
+returns executable rules for explicitly approved, exception-free, positive
+conjunctions of unqualified factual atoms. Approval must be an explicit human
+review decision; the ingestion pipeline does not auto-approve or auto-execute.
+`compile_logic` returns a plain JSON-compatible dictionary; an adapter to the
+separately installed `neo_reasoning` package is not included.
+
+The extraction prompt is updated but output quality depends on the Ollama model.
+The existing tests and new offline manual-rule tests pass; live Neo4j and Ollama
+integration were not exercised here. The previous PDF pipeline and resolution
+passes are preserved, not reimplemented from scratch.

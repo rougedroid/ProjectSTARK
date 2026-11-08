@@ -59,7 +59,15 @@ Rules:
    If none is plausible, leave candidate_ids empty. Never force a link.
 6. local_id values (p1, p2, ...) must be unique within your response.
 7. If the clause contains no propositions (e.g. a heading), return {"propositions": []}.
-8. Respond with JSON only, matching the provided schema."""
+8. For each proposition also emit `logic`: a typed logical IR (fact, norm, rule, definition,
+   exception, unresolved). The IR must be faithful to the quote, with explicit modality.
+   Use recursive Expr trees for conditions: {"op":"atom","atom":{...}},
+   {"op":"and","args":[...]}, {"op":"or","args":[...]}, {"op":"not","args":[...]}.
+   For rules, premise is an Expr and conclusion an Atom. Do not turn a permission to
+   terminate into automatic termination. Preserve exceptions in logic.exceptions.
+   Set review_status="proposed". If ambiguous, use kind="unresolved" and unresolved_reason.
+   All logical content is a PROPOSAL pending review; do not invent facts.
+9. Respond with JSON only, matching the provided schema."""
 
 
 class OllamaExtractor:

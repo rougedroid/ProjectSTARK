@@ -5,6 +5,7 @@ from enum import Enum
 from typing import Any, Optional
 
 from pydantic import BaseModel, Field, field_validator
+from ..logic.schema import Logic
 
 
 class Modality(str, Enum):
@@ -71,6 +72,7 @@ class ExtractedProposition(BaseModel):
     extraction_confidence: float = Field(default=0.5, ge=0.0, le=1.0)
     source_quote: str = Field(min_length=1)
     references: list[Reference] = Field(default_factory=list)
+    logic: Optional[Logic] = None
 
     @field_validator("conditions", "exceptions", "references", mode="before")
     @classmethod
@@ -120,6 +122,7 @@ class Proposition(ExtractedProposition):
             "extraction_confidence": self.extraction_confidence,
             "source_quote": self.source_quote,
             "references_json": json.dumps([r.model_dump(mode="json") for r in self.references]),
+            "logic_json": self.logic.model_dump_json() if self.logic is not None else None,
         }
 
     @classmethod
@@ -149,6 +152,7 @@ class Proposition(ExtractedProposition):
             extraction_confidence=p.get("extraction_confidence") or 0.5,
             source_quote=p["source_quote"],
             references=refs,
+            logic=json.loads(p["logic_json"]) if p.get("logic_json") else None,
             mention_ids=mention_ids or [],
             subject_entity_id=subject_entity_id,
             object_entity_id=object_entity_id,

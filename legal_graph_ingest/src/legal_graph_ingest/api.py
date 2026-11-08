@@ -136,6 +136,48 @@ class GraphIngestor:
             document_id, llm_relations=llm_relations
         )
 
+    def add_rule(self, text: str, *, document_id: Optional[str] = None, resolve: bool = False) -> list[Proposition]:
+        """Extract and store a user-supplied clause through the SAME validated pipeline.
+
+        If document_id is omitted, store under a dedicated user-authored Document.
+        If supplied, the document must already exist. Provenance is marked user_input,
+        page 0; never misrepresent manually supplied text as a PDF passage.
+        Repeated identical text is idempotent via stable IDs and checkpoints.
+        """
+        from hashlib import sha256
+        from .ids import stable_id
+        from .models.document import DocumentText, DocumentRecord, IngestionStatus
+        from .extraction.segmenter import Clause
+        from .extraction.context import ContextMemory
+        from .storage.repository import CHECKPOINT_DONE
+        if not text or not text.strip():
+            raise ValueError("Rule text cannot be empty")
+        text = text.strip()
+        if document_id is None:
+            document_id = stable_id("doc", "user-authored-rules")
+            if self.repository.get_document(document_id) is None:
+                self.repository.upsert_document(DocumentRecord(document_id, "user-authored-rules", sha256(b"user-authored-rules").hexdigest(), 0, IngestionStatus.EXTRACTED))
+        elif self.repository.get_document(document_id) is None:
+            raise ValueError(f"Document does not exist: {document_id}")
+        clause_key = stable_id("manual", document_id, text)
+        if self.repository.clause_status(document_id, clause_key) == CHECKPOINT_DONE:
+            return [p for p in self.propositions(document_id) if p.clause_key == clause_key]
+        doc = DocumentText(filename="user-input", sha256=sha256(text.encode()).hexdigest(), page_count=0, text=text)
+        clause = Clause(key=clause_key, section="user_input", clause_number=None, start=0, end=len(text), text=text)
+        pipe = self._pipeline(need_extractor=True, llm=False)
+        memory = ContextMemory()
+        for p in self.propositions(document_id):
+            memory.add_proposition(p.proposition_id, p.normalized_text)
+        ctx = pipe.context_builder.build(clause, memory, None)
+        validated = pipe.extractor.extract(ctx, lambda raw: pipe._validate(raw, doc, clause, memory))
+        batch = pipe._build_batch(document_id, doc, clause, validated, memory)
+        for prop in batch.propositions:
+            prop.attribution = "user_input"
+        self.repository.save_clause(document_id, batch)
+        if resolve:
+            self.resolve(document_id)
+        return batch.propositions
+
     # ------------------------------------------------------------------ read the graph
     def document(self, document_id: str) -> Optional[DocumentRecord]:
         return self.repository.get_document(document_id)

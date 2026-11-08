@@ -14,7 +14,7 @@ from .pipeline import IngestPipeline, IngestReport
 from .storage.memory import InMemoryRepository
 from .storage.repository import Neo4jRepository, Repository
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "GraphIngestor", "IngestedDocument", "ingest_pdf", "Settings",
@@ -23,3 +23,5 @@ __all__ = [
     "Relation", "RelationType",
     "Repository", "InMemoryRepository", "Neo4jRepository",
 ]
+
+from .logic import Logic, Atom, Expr, compile_logic
