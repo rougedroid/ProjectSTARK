@@ -4,7 +4,7 @@ import json
 from enum import Enum
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from ..logic.schema import Logic
 
 
@@ -73,6 +73,15 @@ class ExtractedProposition(BaseModel):
     source_quote: str = Field(min_length=1)
     references: list[Reference] = Field(default_factory=list)
     logic: Optional[Logic] = None
+
+    @model_validator(mode="after")
+    def semantic_consistency(self):
+        """Reject obvious logical strengthening; unresolved cases remain reviewable."""
+        from ..validation.semantics import validate_proposition
+        issues = validate_proposition(self)
+        if issues:
+            raise ValueError("; ".join(issues))
+        return self
 
     @field_validator("conditions", "exceptions", "references", mode="before")
     @classmethod

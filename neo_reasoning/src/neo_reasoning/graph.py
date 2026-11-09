@@ -74,5 +74,5 @@ class KnowledgeGraph:
         return [Document(**{k:v for k,v in r["d"].items() if k in Document.__dataclass_fields__}) for r in rows]
     def rules(self, limit: int = 5000):
         """Project only explicit structured rules; no free-text interpretation."""
-        from .reasoning import project_rules
-        return project_rules(self.facts(limit=limit))[0]
+        from .compiler import compile_parser_logic
+        return compile_parser_logic(self.facts(limit=limit))[0]

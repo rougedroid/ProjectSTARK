@@ -77,16 +77,19 @@ class IngestPipeline:
         retry_quarantined: bool = False,
         max_clauses: Optional[int] = None,
         progress: Optional[Callable[[int, int, str], None]] = None,
+        revision: Optional[str] = None,
     ) -> IngestReport:
         if self.extractor is None:
             raise RuntimeError("An extractor is required for ingestion.")
         doc = read_pdf(pdf_path)
-        document_id = stable_id("doc", doc.sha256)
+        document_id = stable_id("doc", doc.sha256, "revision", revision) if revision else stable_id("doc", doc.sha256)
         self.repo.upsert_document(
             DocumentRecord(document_id, doc.filename, doc.sha256, doc.page_count, IngestionStatus.EXTRACTING)
         )
         self.repo.set_status(document_id, IngestionStatus.EXTRACTING)
 
+        if revision and (not revision.strip() or len(revision) > 80):
+            raise ValueError("revision must be 1-80 non-whitespace characters")
         clauses = segment(doc.text, self.settings.max_clause_chars)
         report = IngestReport(document_id=document_id, clauses_total=len(clauses), status=IngestionStatus.EXTRACTING)
         log.info("%s: %d pages, %d clauses", doc.filename, doc.page_count, len(clauses))
@@ -291,8 +294,9 @@ class IngestPipeline:
         retry_quarantined: bool = False,
         max_clauses: Optional[int] = None,
         progress: Optional[Callable[[int, int, str], None]] = None,
+        revision: Optional[str] = None,
     ) -> IngestReport:
-        report = self.extract(pdf_path, retry_quarantined=retry_quarantined, max_clauses=max_clauses, progress=progress)
+        report = self.extract(pdf_path, retry_quarantined=retry_quarantined, max_clauses=max_clauses, progress=progress, revision=revision)
         if resolve and report.status == IngestionStatus.EXTRACTED:
             r = self.resolve(report.document_id, llm_relations=llm_relations)
             report.relations, report.unresolved_references, report.status = r.relations, r.unresolved_references, r.status

@@ -45,3 +45,32 @@ def compile_rules(raw_rules):
         except (KeyError, TypeError, ValueError) as exc:
             errors.append({'rule_index': index, 'reason': str(exc)})
     return rules, errors
+
+
+def compile_parser_logic(propositions):
+    """Adapt approved persisted extractor IR to executable factual rules.
+
+    Returns (rules, diagnostics). Normative conclusions are not factual rules.
+    """
+    from .logic_ir import load_logic
+    claims, structured, issues = load_logic(propositions)
+    out = []
+    for item in structured:
+        if item.review_status != 'approved':
+            issues.append({'proposition_id': item.source_id, 'reason': 'rule not approved'})
+            continue
+        if item.exceptions:
+            issues.append({'proposition_id': item.source_id, 'reason': 'unsupported exceptions'})
+            continue
+        if item.conclusion.modality not in FACT_MODALITIES:
+            issues.append({'proposition_id': item.source_id, 'reason': 'normative conclusion: not a factual rule'})
+            continue
+        if len(item.branches) != 1:
+            issues.append({'proposition_id': item.source_id, 'reason': 'unsupported disjunction'})
+            continue
+        premises = item.branches[0]
+        if any(p.modality not in FACT_MODALITIES or p.temporal_scope or p.polarity != 'positive' for p in premises):
+            issues.append({'proposition_id': item.source_id, 'reason': 'unsupported normative/temporal/negative premise'})
+            continue
+        out.append(Rule(item.rule_id, item.rule_id, tuple(p.pattern for p in premises), item.conclusion.pattern, (), item.source_id, item.conclusion.modality))
+    return out, issues

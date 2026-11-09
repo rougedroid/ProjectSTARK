@@ -68,6 +68,7 @@ class Proposition:
     extraction_confidence: float | None = None
     source_quote: str = ""
     references: tuple[Reference, ...] = ()
+    logic_json: str | None = None
     def pattern(self) -> Pattern:
         return Pattern(self.subject, self.predicate, self.object)
     @property

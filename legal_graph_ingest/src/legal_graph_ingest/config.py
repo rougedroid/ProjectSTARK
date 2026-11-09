@@ -28,6 +28,9 @@ class Settings:
     ollama_model: str = ""
     ollama_timeout: float = 300.0
     max_retries: int = 3
+    ollama_num_predict: int = 2048
+    ollama_num_ctx: int = 8192
+    ollama_num_thread: int | None = None
     neo4j_uri: str = "bolt://localhost:7687"
     neo4j_username: str = "neo4j"
     neo4j_password: str = ""
@@ -47,6 +50,9 @@ class Settings:
             ollama_model=env("OLLAMA_MODEL", ""),
             ollama_timeout=float(env("OLLAMA_TIMEOUT", cls.ollama_timeout)),
             max_retries=int(env("EXTRACTION_MAX_RETRIES", cls.max_retries)),
+            ollama_num_predict=int(env("OLLAMA_NUM_PREDICT", cls.ollama_num_predict)),
+            ollama_num_ctx=int(env("OLLAMA_NUM_CTX", cls.ollama_num_ctx)),
+            ollama_num_thread=int(env("OLLAMA_NUM_THREAD")) if env("OLLAMA_NUM_THREAD") else None,
             neo4j_uri=env("NEO4J_URI", cls.neo4j_uri),
             neo4j_username=env("NEO4J_USERNAME", cls.neo4j_username),
             neo4j_password=env("NEO4J_PASSWORD", ""),
@@ -56,6 +62,12 @@ class Settings:
             max_llm_relation_pairs=int(env("MAX_LLM_RELATION_PAIRS", cls.max_llm_relation_pairs)),
             min_relation_confidence=float(env("MIN_RELATION_CONFIDENCE", cls.min_relation_confidence)),
         )
+
+    def generation_options(self) -> dict:
+        options = {"temperature": 0, "num_predict": self.ollama_num_predict, "num_ctx": self.ollama_num_ctx}
+        if self.ollama_num_thread is not None:
+            options["num_thread"] = self.ollama_num_thread
+        return options
 
     def require_model(self) -> None:
         if not self.ollama_model or self.ollama_model.startswith("<"):

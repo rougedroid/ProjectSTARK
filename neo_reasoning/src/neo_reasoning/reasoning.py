@@ -24,7 +24,7 @@ def project_rules(facts: list[Proposition]) -> tuple[list[Rule], list[dict]]:
     """Project ONLY fully structured conditional propositions; report non-executable clauses."""
     rules, skipped = [], []
     for p in facts:
-        if not p.conditions:
+        if p.logic_json or not p.conditions:
             continue
         premises = [parse_pattern(s) for s in p.conditions]
         exceptions = [parse_pattern(s) for s in p.exceptions]
@@ -62,6 +62,14 @@ def is_unconditional(p: Proposition) -> bool:
 
 def classify(p: Proposition) -> str:
     """Negative polarity is not negation of an obligation/permission."""
+    if p.logic_json:
+        from .logic_ir import parse_logic
+        claim, rule, issue = parse_logic(p.logic_json, p.proposition_id)
+        if issue or rule or not claim or claim.review_status != "approved": return "qualified"
+        if claim.kind != "fact" or claim.modality not in {"statement", "representation"}: return "qualified"
+        if claim.pattern != p.pattern() or not p.object.strip(): return "qualified"
+    else:
+        return "qualified"  # legacy extractions require explicit review
     if not is_unconditional(p): return 'qualified'
     return 'positive' if p.polarity == 'positive' else 'negative'
 
@@ -79,8 +87,11 @@ def explicit_edges(graph, fact_ids: set[str], relation: str):
 
 def load_rules(facts, workspace):
     """Load explicit structured rules plus optional reviewed rules in workspace metadata."""
-    from .compiler import compile_rules
+    from .compiler import compile_rules, compile_parser_logic
     rules, skipped = project_rules(facts)
+    structured, issues = compile_parser_logic(facts)
+    rules += structured
+    skipped += issues
     extra, errors = compile_rules(workspace.metadata.get('compiled_rules', []))
     return rules + extra, skipped + errors
 

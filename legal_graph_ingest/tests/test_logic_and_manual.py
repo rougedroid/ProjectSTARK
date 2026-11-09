@@ -7,7 +7,7 @@ class Backend:
     def chat(self, **kwargs):
         text = 'If the Client pays all outstanding fees, the Client becomes eligible for closure.'
         return {'message': {'content': json.dumps({'propositions':[{
-            'local_id':'p1','subject':'Client','predicate':'becomes eligible for','object':'closure',
+            'local_id':'p1','subject':'Client','predicate':'eligible for','object':'closure',
             'normalized_text':text,'modality':'condition','source_quote':text,
             'logic':{'kind':'rule','premise':{'op':'atom','atom':{'subject':'Client','predicate':'pays','object':'all outstanding fees'}},
             'conclusion':{'subject':'Client','predicate':'eligible for','object':'closure'}}

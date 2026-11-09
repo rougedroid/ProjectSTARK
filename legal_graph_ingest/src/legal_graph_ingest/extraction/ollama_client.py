@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from typing import Any, Callable, Optional, Protocol, TypeVar
 
 from pydantic import BaseModel, Field
@@ -67,7 +68,27 @@ Rules:
    terminate into automatic termination. Preserve exceptions in logic.exceptions.
    Set review_status="proposed". If ambiguous, use kind="unresolved" and unresolved_reason.
    All logical content is a PROPOSAL pending review; do not invent facts.
-9. Respond with JSON only, matching the provided schema."""
+9. The top-level subject/predicate/object MUST exactly match the logical conclusion when present.
+   For copulas (is, means, includes), the object is mandatory. Use an empty object ONLY
+   for genuinely intransitive predicates such as "exists" or "expired".
+10. Conditional premises are NOT asserted facts. For "If Client pays fees, Agreement terminates",
+    emit ONE proposition: subject=Agreement, predicate=status, object=terminated,
+    modality=condition, logic.kind=rule, premise={op:atom,atom:{subject:Client,predicate:pays,
+    object:fees}}, conclusion={subject:Agreement,predicate:status,object:terminated}.
+    Do NOT separately emit "Client pays fees" as an unconditional proposition.
+11. Fact example: "Company A is the Client" -> subject=Company A, predicate=is, object=Client,
+    modality=statement, logic.kind=fact, conclusion={subject:Company A,predicate:is,object:Client}.
+12. Definition example: "Term means one year" -> subject=Term,predicate=means,object=one year,
+    modality=definition, logic.kind=definition, conclusion={subject:Term,predicate:means,object:one year}.
+13. Norm example: "Provider shall notify Client" -> subject=Provider,predicate=notify,object=Client,
+    modality=obligation, logic.kind=norm, conclusion={subject:Provider,predicate:notify,
+    object:Client,modality:obligation}. It is NOT proof that notice was sent.
+14. Two conditions: "If A and B, C" -> rule premise={op:and,args:[{op:atom,atom:A},
+    {op:atom,atom:B}]}; each child must be a complete expression. For ONE condition use
+    op=atom, NEVER and/or with one child. If uncertain, kind=unresolved with reason.
+15. References are only for genuine antecedents. Do not create a reference to the current
+    proposition. Do not use references for the proposition's own subject or object.
+16. Respond with JSON only, matching the provided schema."""
 
 
 class OllamaExtractor:
@@ -85,16 +106,19 @@ class OllamaExtractor:
         ]
         last_raw, last_err = "", "no attempt made"
         for attempt in range(1, self.settings.max_retries + 1):
+            start = time.monotonic()
+            log.info("extraction request attempt=%d/%d model=%s chars=%d", attempt, self.settings.max_retries, self.settings.ollama_model, len(ctx.render()))
             try:
                 resp = self.backend.chat(
                     model=self.settings.ollama_model,
                     messages=messages,
                     format=self.schema,
-                    options={"temperature": 0},
+                    options=self.settings.generation_options(),
                 )
                 last_raw = _content(resp)
+                log.info("extraction response attempt=%d elapsed=%.2fs bytes=%d", attempt, time.monotonic()-start, len(last_raw))
             except Exception as exc:  # network/model errors are retried too
-                last_err = f"ollama call failed: {exc}"
+                last_err = f"ollama call failed after {time.monotonic()-start:.2f}s: {exc}"
                 log.warning("attempt %d/%d: %s", attempt, self.settings.max_retries, last_err)
                 continue
             try:
@@ -146,7 +170,7 @@ class OllamaJudge:
                     model=self.settings.ollama_model,
                     messages=messages,
                     format=model_cls.model_json_schema(),
-                    options={"temperature": 0},
+                    options=self.settings.generation_options(),
                 )
                 return model_cls.model_validate(json.loads(_content(resp)))
             except Exception as exc:

@@ -106,6 +106,7 @@ class GraphIngestor:
         retry_quarantined: bool = False,
         max_clauses: Optional[int] = None,
         progress: Optional[ProgressCallback] = None,
+        revision: Optional[str] = None,
     ) -> IngestReport:
         """Extract (checkpointed, resumable) and by default resolve + relate a contract PDF."""
         return self._pipeline(need_extractor=True, llm=llm_relations).ingest(
@@ -115,6 +116,7 @@ class GraphIngestor:
             retry_quarantined=retry_quarantined,
             max_clauses=max_clauses,
             progress=progress,
+            revision=revision,
         )
 
     def extract(
@@ -124,10 +126,11 @@ class GraphIngestor:
         retry_quarantined: bool = False,
         max_clauses: Optional[int] = None,
         progress: Optional[ProgressCallback] = None,
+        revision: Optional[str] = None,
     ) -> IngestReport:
         """Extraction stage only."""
         return self._pipeline(need_extractor=True, llm=False).extract(
-            pdf_path, retry_quarantined=retry_quarantined, max_clauses=max_clauses, progress=progress
+            pdf_path, retry_quarantined=retry_quarantined, max_clauses=max_clauses, progress=progress, revision=revision
         )
 
     def resolve(self, document_id: str, *, llm_relations: bool = False) -> IngestReport:
